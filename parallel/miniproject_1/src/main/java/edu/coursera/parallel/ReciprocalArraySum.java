@@ -1,6 +1,10 @@
 package edu.coursera.parallel;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.RecursiveAction;
+
+import static java.util.concurrent.ForkJoinTask.invokeAll;
 
 /**
  * Class wrapping methods for implementing reciprocal array sum in parallel.
@@ -125,7 +129,11 @@ public final class ReciprocalArraySum {
 
         @Override
         protected void compute() {
-            // TODO
+            double result = 0;
+            for(int i = startIndexInclusive ; i < endIndexExclusive ; i++) {
+                result += 1 / input[i];
+            }
+            this.value = result;
         }
     }
 
@@ -142,13 +150,13 @@ public final class ReciprocalArraySum {
         assert input.length % 2 == 0;
 
         double sum = 0;
+        ReciprocalArraySumTask left = new ReciprocalArraySumTask(0, input.length / 2, input);
+        ReciprocalArraySumTask right = new ReciprocalArraySumTask(input.length /2, input.length, input);
+        left.fork();
+        right.compute();
+        left.join();
 
-        // Compute sum of reciprocals of array elements
-        for (int i = 0; i < input.length; i++) {
-            sum += 1 / input[i];
-        }
-
-        return sum;
+        return left.getValue() + right.getValue();
     }
 
     /**
@@ -163,13 +171,20 @@ public final class ReciprocalArraySum {
      */
     protected static double parManyTaskArraySum(final double[] input,
             final int numTasks) {
+
+        List<ReciprocalArraySumTask> subtasks = new ArrayList<>();
+        int size = input.length / numTasks;
+        for(int i = 0 ; i < numTasks ; i++) {
+            subtasks.add(new ReciprocalArraySumTask(size * i, size * (i+1), input));
+        }
+        invokeAll(subtasks.toArray(new ReciprocalArraySumTask[numTasks]));
+
+
         double sum = 0;
 
-        // Compute sum of reciprocals of array elements
-        for (int i = 0; i < input.length; i++) {
-            sum += 1 / input[i];
+        for(ReciprocalArraySumTask task : subtasks) {
+            sum = sum + task.getValue();
         }
-
         return sum;
     }
 }
