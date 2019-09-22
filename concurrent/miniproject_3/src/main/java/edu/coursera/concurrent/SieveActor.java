@@ -5,7 +5,10 @@ import edu.rice.pcdp.Actor;
 import java.util.HashSet;
 import java.util.Set;
 
+import static edu.coursera.concurrent.SieveData.FINISH;
 import static edu.rice.pcdp.PCDP.finish;
+import static java.util.Objects.isNull;
+import static java.util.Objects.nonNull;
 
 /**
  * An actor-based implementation of the Sieve of Eratosthenes.
@@ -30,12 +33,12 @@ public final class SieveActor extends Sieve {
             for (int i = 2; i <= limit; i++) {
                 sieveActor.send(new SieveData(i, maxPrime));
             }
-            sieveActor.send(new SieveData(0, maxPrime));
+            sieveActor.send(FINISH);
         });
 
         int primes = 0;
         for (SieveActorActor iter = sieveActor; iter != null; iter = iter.nextActor) {
-            primes += iter.numLocalPrimes();
+            primes += iter.localPrimes.size();
         }
         return primes;
     }
@@ -57,42 +60,41 @@ public final class SieveActor extends Sieve {
          */
         @Override
         public void process(final Object msg) {
-            SieveData data = (SieveData) msg;
-
-            Integer numberToCheck = data.getWorkingNumber();
-
-            if (numberToCheck <= 0) {
-                if (this.nextActor != null) {
-                    this.nextActor.send(msg);
-                }
+            if (msg == FINISH && nonNull(nextActor)) {
+                nextActor.send(FINISH);
             } else {
-                boolean locallyPrime = isLocalPrime(numberToCheck);
-
-                if (locallyPrime) {
-                    if (this.localPrimes.size() < data.getMaxLocalPrimes()) {
-                        this.localPrimes.add(numberToCheck);
-                    } else {
-                        if (nextActor == null) {
-                            nextActor = new SieveActorActor();
-                        }
-
-                        nextActor.send(msg);
-                    }
-                }
+                sieve((SieveData) msg);
             }
         }
 
-        boolean isLocalPrime(int candidate) {
-            for (Integer prime : localPrimes) {
-                if (candidate % prime == 0) {
-                    return false;
-                }
+        private void sieve(SieveData sieveData) {
+            Integer numberToCheck = sieveData.getNumberToCheck();
+            if (isLocalPrime(sieveData.getNumberToCheck())) {
+                addToLocalPrimes(sieveData);
             }
-            return true;
         }
 
-        public int numLocalPrimes() {
-            return this.localPrimes.size();
+        private void addToLocalPrimes(SieveData sieveData) {
+            if (isLocalPrime(sieveData)) {
+                localPrimes.add(sieveData.getNumberToCheck());
+            } else {
+                sendToNextActor(sieveData);
+            }
+        }
+
+        private boolean isLocalPrime(SieveData data) {
+            return localPrimes.size() < data.getMaxLocalPrimes();
+        }
+
+        private void sendToNextActor(Object msg) {
+            if (isNull(nextActor)) {
+                nextActor = new SieveActorActor();
+            }
+            nextActor.send(msg);
+        }
+
+        boolean isLocalPrime(int number) {
+            return localPrimes.stream().parallel().noneMatch(prime -> number % prime == 0);
         }
     }
 }
